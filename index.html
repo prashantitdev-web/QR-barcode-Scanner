@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Barcode Comparator</title>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.10/html5-qrcode.min.js"></script>
+
+<style>
+body{
+    margin:0;
+    padding:15px;
+    font-family:Arial,sans-serif;
+    background:#f4f7fb;
+}
+
+.container{
+    max-width:700px;
+    margin:auto;
+    background:white;
+    padding:15px;
+    border-radius:15px;
+    box-shadow:0 0 15px rgba(0,0,0,.08);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    margin-top:10px;
+    font-size:16px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.primary{
+    background:#0b6bcb;
+    color:white;
+}
+
+.secondary{
+    background:#e8f0fe;
+}
+
+#reader{
+    width:100%;
+    margin-top:15px;
+}
+
+.status{
+    margin-top:10px;
+    padding:10px;
+    background:#eef4ff;
+    border-radius:10px;
+    word-break:break-word;
+}
+
+.box{
+    margin-top:10px;
+    padding:10px;
+    background:#f7f7f7;
+    border-radius:10px;
+    word-break:break-word;
+}
+
+.result{
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
+    margin-top:15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>QR + Barcode Comparator</h2>
+
+<button class="primary" onclick="startScan(1)">
+Scan Code 1
+</button>
+
+<button class="primary" id="btn2" onclick="startScan(2)" disabled>
+Scan Code 2
+</button>
+
+<button class="secondary" onclick="stopScanner()">
+Stop Camera
+</button>
+
+<div id="reader"></div>
+
+<div id="status" class="status">
+Ready
+</div>
+
+<div class="box">
+<b>Code 1:</b>
+<div id="code1">Not Scanned</div>
+</div>
+
+<div class="box">
+<b>Code 2:</b>
+<div id="code2">Not Scanned</div>
+</div>
+
+<div id="result" class="result"></div>
+
+</div>
+
+<script>
+
+let scanner = null;
+
+let firstCode = "";
+let secondCode = "";
+
+let currentScan = 1;
+
+const statusEl = document.getElementById("status");
+
+function setStatus(msg){
+    statusEl.innerText = msg;
+}
+
+async function stopScanner(){
+
+    try{
+        if(scanner){
+            await scanner.stop();
+        }
+    }catch(e){}
+
+    try{
+        if(scanner){
+            await scanner.clear();
+        }
+    }catch(e){}
+
+    scanner = null;
+}
+
+async function getBestCamera(){
+
+    const cameras = await Html5Qrcode.getCameras();
+
+    if(!cameras.length){
+        throw new Error("No camera found");
+    }
+
+    let backCamera =
+        cameras.find(c =>
+            c.label.toLowerCase().includes("back")
+        );
+
+    if(!backCamera){
+        backCamera = cameras[cameras.length - 1];
+    }
+
+    return backCamera.id;
+}
+
+async function startScan(scanNo){
+
+    currentScan = scanNo;
+
+    document.getElementById("result").innerHTML = "";
+
+    try{
+
+        setStatus("Requesting camera permission...");
+
+        await navigator.mediaDevices.getUserMedia({
+            video:true
+        });
+
+        await stopScanner();
+
+        scanner = new Html5Qrcode("reader");
+
+        const cameraId = await getBestCamera();
+
+        setStatus("Opening camera...");
+
+        await scanner.start(
+            cameraId,
+            {
+                fps:10,
+                qrbox:250,
+                aspectRatio:1
+            },
+            async(decodedText)=>{
+
+                if(currentScan === 1){
+
+                    firstCode = decodedText;
+
+                    document.getElementById("code1").innerText =
+                        decodedText;
+
+                    document.getElementById("btn2").disabled = false;
+
+                    await stopScanner();
+
+                    setStatus(
+                        "Code 1 scanned. Now scan Code 2."
+                    );
+
+                }else{
+
+                    secondCode = decodedText;
+
+                    document.getElementById("code2").innerText =
+                        decodedText;
+
+                    await stopScanner();
+
+                    if(
+                        firstCode.trim() ===
+                        secondCode.trim()
+                    ){
+
+                        document.getElementById("result")
+                            .innerHTML =
+                            "✅ MATCH";
+
+                        alert("Both codes matched");
+
+                    }else{
+
+                        document.getElementById("result")
+                            .innerHTML =
+                            "❌ FAILED";
+
+                        alert("Codes do not match");
+                    }
+                }
+
+            }
+        );
+
+        setStatus("Camera started");
+
+    }catch(err){
+
+        setStatus(
+            "ERROR: " +
+            err.message
+        );
+
+        console.error(err);
+    }
+}
+
+window.addEventListener(
+    "beforeunload",
+    () => stopScanner()
+);
+
+</script>
+
+</body>
+</html>
